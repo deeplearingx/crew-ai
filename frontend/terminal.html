@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DevCrew Terminal</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --toolbar: rgba(15,12,41,0.95);
+    --border: rgba(255,255,255,0.08);
+    --accent: #8b5cf6;
+    --cyan: #06b6d4;
+    --text: #e2e8f0;
+    --muted: rgba(255,255,255,0.4);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex; flex-direction: column;
+  }
+
+  /* --- Toolbar --- */
+  .toolbar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 16px;
+    background: var(--toolbar);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .toolbar-brand {
+    display: flex; align-items: center; gap: 8px;
+    margin-right: 12px;
+  }
+  .toolbar-logo {
+    width: 28px; height: 28px;
+    background: linear-gradient(135deg, var(--accent), var(--cyan));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; color: #fff;
+  }
+  .toolbar-title { font-size: 14px; font-weight: 600; letter-spacing: 1px; }
+  .toolbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+
+  .btn {
+    display: flex; align-items: center; gap: 5px;
+    padding: 5px 12px; border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.04);
+    color: var(--text); font-size: 12px; cursor: pointer;
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
+  .btn-icon { font-size: 14px; line-height: 1; }
+  .btn-accent { border-color: rgba(139,92,246,0.3); background: rgba(139,92,246,0.1); }
+  .btn-accent:hover { background: rgba(139,92,246,0.2); border-color: rgba(139,92,246,0.5); }
+  .btn-danger { border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.08); }
+  .btn-danger:hover { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.5); }
+
+  .layout-toggle {
+    display: flex; border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--border); background: rgba(255,255,255,0.04);
+  }
+  .layout-btn {
+    padding: 5px 10px; font-size: 12px; cursor: pointer;
+    background: transparent; border: none; color: var(--muted);
+    transition: all 0.15s;
+  }
+  .layout-btn:hover { color: var(--text); }
+  .layout-btn.active { background: rgba(139,92,246,0.2); color: #fff; }
+
+  .shell-select {
+    padding: 5px 8px; border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.04);
+    color: var(--text); font-size: 12px; cursor: pointer;
+  }
+  .shell-select option { background: #1a1a2e; }
+
+  .toolbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .pane-count { font-size: 12px; color: var(--muted); }
+
+  /* --- Pane container --- */
+  .pane-container {
+    flex: 1; display: flex; overflow: hidden;
+  }
+  .pane-container.horizontal { flex-direction: column; }
+  .pane-container.vertical { flex-direction: row; }
+
+  /* --- Pane --- */
+  .pane {
+    display: flex; flex-direction: column;
+    min-width: 200px; min-height: 150px;
+    overflow: hidden; position: relative;
+    flex: 1;
+  }
+  .pane-header {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px; color: var(--muted); flex-shrink: 0;
+  }
+  .pane-header .session-id {
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    font-size: 10px; color: rgba(139,92,246,0.6);
+    max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .pane-header .shell-label {
+    padding: 1px 6px; border-radius: 4px;
+    background: rgba(6,182,212,0.1); color: var(--cyan); font-size: 10px;
+  }
+  .pane-close {
+    margin-left: auto; cursor: pointer; color: var(--muted);
+    font-size: 14px; line-height: 1; padding: 0 4px;
+    transition: color 0.15s;
+  }
+  .pane-close:hover { color: #ef4444; }
+  .pane-body {
+    flex: 1; overflow: hidden; background: #0a0a0f;
+  }
+  .pane-body .xterm { height: 100%; padding: 2px; }
+
+  /* --- Divider (resize handle) --- */
+  .divider {
+    flex-shrink: 0; background: var(--border);
+    transition: background 0.15s; position: relative; z-index: 10;
+  }
+  .divider:hover, .divider.dragging { background: rgba(139,92,246,0.4); }
+  .pane-container.horizontal .divider { height: 4px; cursor: row-resize; }
+  .pane-container.vertical .divider { width: 4px; cursor: col-resize; }
+
+  /* --- Empty state --- */
+  .empty-state {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--muted); gap: 16px;
+  }
+  .empty-icon { font-size: 48px; opacity: 0.3; }
+  .empty-text { font-size: 14px; }
+  .empty-hint { font-size: 12px; color: rgba(255,255,255,0.25); }
+
+  /* --- Resize indicator --- */
+  .resize-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 1000; cursor: col-resize;
+  }
+  .resize-overlay.horizontal { cursor: row-resize; }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="toolbar-brand">
+    <div class="toolbar-logo">T</div>
+    <div class="toolbar-title">Terminal</div>
+  </div>
+  <div class="toolbar-sep"></div>
+
+  <button class="btn btn-accent" id="addPaneBtn" title="Add new terminal pane">
+    <span class="btn-icon">+</span> Add Pane
+  </button>
+
+  <div class="layout-toggle" id="layoutToggle">
+    <button class="layout-btn active" data-layout="horizontal" title="Vertical stack">&#9776;</button>
+    <button class="layout-btn" data-layout="vertical" title="Side by side">&#9775;</button>
+  </div>
+
+  <select class="shell-select" id="shellSelect" title="Default shell for new panes">
+    <option value="cmd.exe">cmd.exe</option>
+    <option value="powershell.exe">PowerShell</option>
+    <option value="bash">Git Bash</option>
+  </select>
+
+  <div class="toolbar-right">
+    <span class="pane-count" id="paneCount">0 panes</span>
+    <div class="toolbar-sep"></div>
+    <button class="btn btn-danger" id="closeAllBtn" title="Close all panes">
+      <span class="btn-icon">&#10005;</span> Close All
+    </button>
+  </div>
+</div>
+
+<div class="pane-container horizontal" id="paneContainer">
+  <div class="empty-state" id="emptyState">
+    <div class="empty-icon">&#128187;</div>
+    <div class="empty-text">No terminal panes</div>
+    <div class="empty-hint">Click "+ Add Pane" to open a terminal</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.js"></script>
+<script>
+(function() {
+  const container = document.getElementById('paneContainer');
+  const emptyState = document.getElementById('emptyState');
+  const addPaneBtn = document.getElementById('addPaneBtn');
+  const closeAllBtn = document.getElementById('closeAllBtn');
+  const layoutToggle = document.getElementById('layoutToggle');
+  const shellSelect = document.getElementById('shellSelect');
+  const paneCountEl = document.getElementById('paneCount');
+
+  let layout = 'horizontal';
+  let panes = [];
+  let paneCounter = 0;
+
+  // --- Layout ---
+  layoutToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.layout-btn');
+    if (!btn) return;
+    layout = btn.dataset.layout;
+    layoutToggle.querySelectorAll('.layout-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    container.className = `pane-container ${layout}`;
+    // Re-fit all terminals after layout change
+    setTimeout(() => panes.forEach(p => p.fit()), 50);
+  });
+
+  // --- Create pane ---
+  addPaneBtn.addEventListener('click', () => createPane());
+
+  function createPane(shell) {
+    if (!shell) shell = shellSelect.value;
+    const id = `pane-${++paneCounter}`;
+    const sessionId = crypto.randomUUID();
+
+    emptyState.style.display = 'none';
+
+    // Add divider before new pane (except first)
+    if (panes.length > 0) {
+      const divider = document.createElement('div');
+      divider.className = 'divider';
+      setupDividerResize(divider);
+      container.appendChild(divider);
+    }
+
+    // Pane DOM
+    const paneEl = document.createElement('div');
+    paneEl.className = 'pane';
+    paneEl.id = id;
+
+    const header = document.createElement('div');
+    header.className = 'pane-header';
+    header.innerHTML = `
+      <span class="shell-label">${escHtml(shell.replace('.exe',''))}</span>
+      <span class="session-id">${sessionId.slice(0,8)}</span>
+      <span class="pane-close" data-pane="${id}" title="Close this pane">&times;</span>
+    `;
+
+    const body = document.createElement('div');
+    body.className = 'pane-body';
+
+    paneEl.appendChild(header);
+    paneEl.appendChild(body);
+    container.appendChild(paneEl);
+
+    // xterm.js
+    const term = new Terminal({
+      theme: {
+        background: '#0a0a0f',
+        foreground: '#e2e8f0',
+        cursor: '#8b5cf6',
+        cursorAccent: '#0a0a0f',
+        selectionBackground: 'rgba(139,92,246,0.3)',
+        black: '#1a1a2e',
+        red: '#ef4444',
+        green: '#10b981',
+        yellow: '#f59e0b',
+        blue: '#3b82f6',
+        magenta: '#8b5cf6',
+        cyan: '#06b6d4',
+        white: '#e2e8f0',
+        brightBlack: '#4a4a6a',
+        brightRed: '#f87171',
+        brightGreen: '#34d399',
+        brightYellow: '#fbbf24',
+        brightBlue: '#60a5fa',
+        brightMagenta: '#a78bfa',
+        brightCyan: '#22d3ee',
+        brightWhite: '#f8fafc',
+      },
+      fontFamily: "'Cascadia Code', 'Fira Code', 'SF Mono', Consolas, monospace",
+      fontSize: 14,
+      lineHeight: 1.2,
+      cursorBlink: true,
+      cursorStyle: 'bar',
+      scrollback: 5000,
+    });
+
+    const fitAddon = new FitAddon.FitAddon();
+    const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+    term.loadAddon(fitAddon);
+    term.loadAddon(webLinksAddon);
+    term.open(body);
+    setTimeout(() => fitAddon.fit(), 50);
+
+    // WebSocket
+    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/terminal?session_id=${sessionId}&shell=${encodeURIComponent(shell)}`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      term.writeln('\x1b[32m-- Connected --\x1b[0m');
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'output') {
+          term.write(msg.data);
+        } else if (msg.type === 'exit') {
+          term.writeln(`\r\n\x1b[33m-- ${msg.data} --\x1b[0m`);
+        } else if (msg.type === 'error') {
+          term.writeln(`\r\n\x1b[31m-- Error: ${msg.data} --\x1b[0m`);
+        }
+      } catch (err) { /* ignore */ }
+    };
+
+    ws.onclose = () => {
+      term.writeln('\r\n\x1b[31m-- Disconnected --\x1b[0m');
+    };
+
+    ws.onerror = () => {
+      term.writeln('\r\n\x1b[31m-- Connection error --\x1b[0m');
+    };
+
+    // Terminal -> WebSocket
+    term.onData((data) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'input', data }));
+      }
+    });
+
+    // Resize -> server
+    term.onResize(({ cols, rows }) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+      }
+    });
+
+    // Close button
+    header.querySelector('.pane-close').addEventListener('click', () => removePane(id));
+
+    // Track pane
+    const paneObj = { id, sessionId, el: paneEl, term, fitAddon, ws };
+    panes.push(paneObj);
+    updateCount();
+
+    // Focus new pane
+    term.focus();
+
+    return paneObj;
+  }
+
+  // --- Remove pane ---
+  function removePane(id) {
+    const idx = panes.findIndex(p => p.id === id);
+    if (idx === -1) return;
+
+    const pane = panes[idx];
+    pane.ws.close();
+    pane.term.dispose();
+    pane.el.remove();
+
+    // Remove adjacent divider
+    const allChildren = Array.from(container.children);
+    const elIdx = allChildren.indexOf(pane.el);
+    // Remove the divider before or after this pane
+    if (allChildren[elIdx - 1] && allChildren[elIdx - 1].classList.contains('divider')) {
+      allChildren[elIdx - 1].remove();
+    } else if (allChildren[elIdx + 1] && allChildren[elIdx + 1].classList.contains('divider')) {
+      allChildren[elIdx + 1].remove();
+    }
+
+    panes.splice(idx, 1);
+    updateCount();
+
+    if (panes.length === 0) {
+      emptyState.style.display = '';
+    }
+
+    // Re-fit remaining panes
+    setTimeout(() => panes.forEach(p => p.fit()), 50);
+  }
+
+  // --- Close all ---
+  closeAllBtn.addEventListener('click', () => {
+    while (panes.length > 0) {
+      removePane(panes[0].id);
+    }
+  });
+
+  // --- Divider resize ---
+  function setupDividerResize(divider) {
+    let startPos, startSize, prevPane, nextPane, isHorizontal;
+
+    divider.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      isHorizontal = layout === 'horizontal';
+      prevPane = divider.previousElementSibling;
+      nextPane = divider.nextElementSibling;
+      if (!prevPane || !nextPane) return;
+
+      startPos = isHorizontal ? e.clientY : e.clientX;
+      startSize = isHorizontal ? prevPane.offsetHeight : prevPane.offsetWidth;
+
+      divider.classList.add('dragging');
+      const overlay = document.createElement('div');
+      overlay.className = `resize-overlay ${isHorizontal ? 'horizontal' : ''}`;
+      document.body.appendChild(overlay);
+
+      const onMove = (e) => {
+        const current = isHorizontal ? e.clientY : e.clientX;
+        const delta = current - startPos;
+        const newSize = Math.max(150, startSize + delta);
+        prevPane.style.flex = 'none';
+        prevPane.style[isHorizontal ? 'height' : 'width'] = newSize + 'px';
+        nextPane.style.flex = '1';
+        panes.forEach(p => p.fit());
+      };
+
+      const onUp = () => {
+        divider.classList.remove('dragging');
+        overlay.remove();
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        panes.forEach(p => p.fit());
+      };
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+
+  // --- Helpers ---
+  function updateCount() {
+    const n = panes.length;
+    paneCountEl.textContent = `${n} pane${n !== 1 ? 's' : ''}`;
+  }
+
+  function escHtml(s) {
+    const d = document.createElement('span');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // --- Window resize ---
+  window.addEventListener('resize', () => {
+    panes.forEach(p => p.fit());
+  });
+
+  // --- Auto-create first pane ---
+  createPane();
+})();
+</script>
+</body>
+</html>

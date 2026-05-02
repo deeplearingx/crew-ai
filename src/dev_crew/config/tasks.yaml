@@ -1,0 +1,60 @@
+plan_task:
+  description: >
+    Analyze the following requirement and create a detailed implementation plan:
+    {requirement}
+
+    The plan MUST include:
+    1. Files to create or modify (with full paths)
+    2. Step-by-step implementation order
+    3. Expected output for each step
+    4. Acceptance criteria for each step
+    5. Dependencies between steps
+  expected_output: >
+    A structured implementation plan with clear steps, file list,
+    function signatures, and acceptance criteria.
+  agent: planner
+
+code_task:
+  description: >
+    Implement the code according to the plan provided above.
+    Follow the plan step by step. Write production-quality code.
+
+    IMPORTANT INSTRUCTIONS:
+    - You MUST use the write_file tool to create each source file on disk.
+    - Do NOT output code in your text response — always call write_file.
+    - Create every file listed in the plan with complete, working code.
+    - After writing all files, use run_command to verify the code runs:
+      "python -c 'import <module>'" or "python <main_file>.py"
+    - If there are syntax errors, fix them and re-run until it works.
+    - The final result must be actual files on disk, not code snippets.
+  expected_output: >
+    A summary of all files created on disk, each with its path and
+    a brief description of what it contains. Confirmation that the
+    code runs without errors.
+  agent: coder
+  context: [plan_task]
+
+test_task:
+  description: >
+    Perform regression testing on the code produced above.
+
+    IMPORTANT INSTRUCTIONS:
+    - You MUST use write_file to create test files on disk.
+    - You MUST use run_command to actually execute the tests (e.g., "python -m pytest").
+    - Do NOT simulate or describe test results — run real tests and report actual output.
+    - If no test framework is installed, use run_command to install it first
+      (e.g., "pip install pytest").
+    - Write test cases covering normal paths and edge cases.
+    - Report the actual test output from run_command.
+
+    For each bug found, report:
+    - Severity (critical/high/medium/low)
+    - Reproduction steps
+    - Expected vs actual behavior
+    - Suggested fix
+  expected_output: >
+    Test report based on ACTUAL test execution results (not simulated),
+    including: test files created, test command used, real test output,
+    pass/fail counts, and any bugs found with severity and reproduction steps.
+  agent: tester
+  context: [code_task]
